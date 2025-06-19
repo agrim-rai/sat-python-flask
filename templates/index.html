@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAT Question Viewer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- MathJax Configuration -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process',
+                renderActions: {
+                    findScript: [10, function (doc) {
+                        document.querySelectorAll('script[type^="math/tex"]').forEach(function (node) {
+                            const display = !!node.type.match(/; *mode=display/);
+                            const math = new doc.options.MathItem(
+                                node.textContent,
+                                doc.inputJax[0],
+                                display
+                            );
+                            const text = document.createTextNode('');
+                            node.parentNode.replaceChild(text, node);
+                            math.start = {node: text, delim: '', n: 0};
+                            math.end = {node: text, delim: '', n: 0};
+                            doc.math.push(math);
+                        });
+                    }, '']
+                }
+            },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady().then(() => {
+                        // Fix any SVG elements within MathML that might have issues
+                        document.querySelectorAll('math svg').forEach(svgFix);
+                    });
+                }
+            }
+        };
+        
+        // Function to fix SVG display issues
+        function svgFix(svg) {
+            if (svg && !svg.getAttribute('viewBox') && svg.getAttribute('width') && svg.getAttribute('height')) {
+                svg.setAttribute('viewBox', `0 0 ${svg.getAttribute('width')} ${svg.getAttribute('height')}`);
+            }
+        }
+    </script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-brain"></i>
+                <h1>SAT Question Viewer</h1>
+            </div>
+            <div class="stats" id="stats">
+                <span class="stat-item">
+                    <i class="fas fa-folder"></i>
+                    <span id="folder-count">0</span> Folders
+                </span>
+                <span class="stat-item">
+                    <i class="fas fa-question-circle"></i>
+                    <span id="total-questions">0</span> Questions
+                </span>
+            </div>
+        </header>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-container">
+                <div class="search-box">
+                    <i class="fas fa-hashtag"></i>
+                    <input 
+                        type="text" 
+                        id="questionId" 
+                        placeholder="Enter Question ID (e.g., 1f0b582e)"
+                        autocomplete="off"
+                    >
+                    <button id="searchBtn" class="search-btn">
+                        <i class="fas fa-play"></i>
+                    </button>
+                </div>
+                <div class="search-suggestions" id="suggestions"></div>
+            </div>
+            
+            <!-- Folder Browser -->
+            <div class="folder-browser">
+                <h3><i class="fas fa-folder-open"></i> Browse by Folder</h3>
+                <div class="folders-grid" id="foldersGrid"></div>
+            </div>
+        </section>
+
+        <!-- Question Display Section -->
+        <section class="question-section" id="questionSection" style="display: none;">
+            <div class="question-header">
+                <div class="question-meta">
+                    <span class="question-id" id="displayQuestionId"></span>
+                    <span class="question-folder" id="displayFolder"></span>
+                    <span class="question-type" id="displayType"></span>
+                </div>
+                <button class="close-btn" id="closeBtn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="question-content">
+                <!-- Question Stem -->
+                <div class="question-stem">
+                    <h2><i class="fas fa-question-circle"></i> Question</h2>
+                    <div class="stem-content" id="stemContent"></div>
+                </div>
+
+                <!-- Answer Options -->
+                <div class="answer-options">
+                    <h3><i class="fas fa-list"></i> Answer Options</h3>
+                    <div class="options-container" id="optionsContainer"></div>
+                </div>
+
+                <!-- Correct Answer -->
+                <div class="correct-answer" id="correctAnswerSection">
+                    <h3><i class="fas fa-check-circle"></i> Correct Answer</h3>
+                    <div class="answer-display" id="correctAnswerDisplay"></div>
+                </div>
+
+                <!-- Rationale -->
+                <div class="rationale-section" id="rationaleSection">
+                    <h3><i class="fas fa-lightbulb"></i> Explanation</h3>
+                    <div class="rationale-content" id="rationaleContent"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading Animation -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading question...</p>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div class="error-message" id="errorMessage">
+            <div class="error-content">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h3>Error</h3>
+                <p id="errorText"></p>
+                <button class="error-close" onclick="hideError()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Question List Modal -->
+        <div class="question-list-modal" id="questionListModal">
+            <div class="question-list-content">
+                <div class="question-list-header">
+                    <h3 id="questionListTitle">Questions</h3>
+                    <button class="question-list-close" onclick="closeQuestionList()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="question-list-scroll" id="questionListScroll">
+                    <!-- Questions will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html> 
